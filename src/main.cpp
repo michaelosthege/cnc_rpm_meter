@@ -8,12 +8,13 @@
 #define OLED_RESET 0  // GPIO0
 Adafruit_SSD1306 display(OLED_RESET);
 
-uint16_t pulseCount = 0;
+volatile uint16_t pulseCount = 0;
 uint16_t interval = 200;
 unsigned long lastUpdate = 0;
 
 
-ICACHE_RAM_ATTR void countPulse() {
+void ICACHE_RAM_ATTR countPulse()
+{
     pulseCount++;
 }
 
@@ -42,22 +43,23 @@ void setup()
     display.display();
     delay(2000);
 
-    pinMode(D4, INPUT);
-    attachInterrupt(digitalPinToInterrupt(D4), countPulse, FALLING);
+    pinMode(D7, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(D7), countPulse, FALLING);
 }
 
 void loop()
 {
-    static unsigned long elapsed = millis() - lastUpdate;
+    static unsigned long elapsed;
     static float rpm;
 
+    elapsed = millis() - lastUpdate;
     if (elapsed < interval)
         return;
 
     // 2 pulses per revolution!
-    rpm = (pulseCount * 30000.0) / elapsed;
+    rpm = ((float)pulseCount / 2.0) * (60000.0 / elapsed);
 
-    Serial.printf(">pulses:%d\n", pulseCount);
+    Serial.printf(">pulses:%i\n", pulseCount);
     Serial.printf(">RPM:%.1f\n", rpm);
     display.clearDisplay();
     display.setCursor(0, 0);
