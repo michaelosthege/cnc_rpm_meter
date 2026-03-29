@@ -9,13 +9,35 @@
 Adafruit_SSD1306 display(OLED_RESET);
 
 volatile uint16_t pulseCount = 0;
+volatile unsigned long previousPulse;
 uint16_t interval = 200;
 unsigned long lastUpdate = 0;
 
+const uint8_t bufferSize = 64;
+volatile unsigned long buffer[bufferSize];
+volatile uint8_t bufferIdx = 0;
 
-void ICACHE_RAM_ATTR countPulse()
+void IRAM_ATTR handlePulseInterrupt()
 {
+    static unsigned long now;
+
     pulseCount++;
+    // measure time since last pulse into rolling buffer
+    now = micros();
+    buffer[bufferIdx] = now - previousPulse;
+    bufferIdx = (bufferIdx + 1) % bufferSize;
+    previousPulse = now;
+}
+
+float getMeanPulsewidth()
+{
+    static unsigned long sum;
+    sum = 0;
+    for (size_t i = 0; i < bufferSize; i++)
+    {
+        sum += buffer[i];
+    }
+    return (float)sum / (float)bufferSize;
 }
 
 void setup()
@@ -44,12 +66,13 @@ void setup()
     delay(2000);
 
     pinMode(D7, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(D7), countPulse, FALLING);
+    attachInterrupt(digitalPinToInterrupt(D7), handlePulseInterrupt, FALLING);
 }
 
 void loop()
 {
     static unsigned long elapsed;
+    static float meanPulsewidth;
     static float rpm;
 
     elapsed = millis() - lastUpdate;
@@ -57,9 +80,14 @@ void loop()
         return;
 
     // 2 pulses per revolution!
-    rpm = ((float)pulseCount / 2.0) * (60000.0 / elapsed);
+    meanPulsewidth = getMeanPulsewidth();
+    if (pulseCount < 4)
+        rpm = 0;
+    else
+        rpm = 60000000.0f / 2 / meanPulsewidth;
 
     Serial.printf(">pulses:%i\n", pulseCount);
+    Serial.printf(">pulseWidth_µS:%.1f\n", meanPulsewidth);
     Serial.printf(">RPM:%.1f\n", rpm);
     display.clearDisplay();
     display.setCursor(0, 0);
